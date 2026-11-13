@@ -179,6 +179,14 @@ The payment-based analytical queries report **recorded payments**, not
 recognized revenue. Payments associated with cancelled or unavailable
 orders must not automatically be reported as sales.
 
+## Key engineering decisions.
+
+- Pre-aggregate one-to-many tables before joining to avoid financial fanout.
+- Preserve orders without payment or item records using LEFT JOINs.
+- Use Decimal for financial precision.
+- Quarantine invalid records instead of silently deleting them.
+- Use Parquet decimal types for downstream analytics.
+
 ## Current limitations
 
 - Analytics loading is a full refresh: `analytics.order_summary` is replaced
