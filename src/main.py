@@ -43,7 +43,7 @@ def main():
 
     try:
 
-        print("\n===== RETAILFLOW ETL STARTED =====")
+        logger.info("RetailFlow ETL started")
 
         # STEP 1: Extract
         data = extract_data(engine)
@@ -51,31 +51,26 @@ def main():
         # STEP 2: Validate
         clean, quarantine = validate_data(data)
 
-        print("\n===== VALIDATION RESULTS =====")
-
         for name, df in clean.items():
-            print(f"{name}: {len(df)} valid records")
+            logger.info("%s: %d valid records", name, len(df))
+        for name, df in quarantine.items():
+            logger.info("%s: %d quarantined records", name, len(df))
 
         # STEP 3: Transform
-        print("\n===== TRANSFORMING DATA =====")
-
         summary = transform_data(clean)
-
-        print(
-            "Analytical dataset shape:",
-            summary.shape
-        )
+        logger.info("Analytical dataset shape: %s", summary.shape)
 
         # STEP 4: Load
-        print("\n===== LOADING DATA =====")
-
         load_data(
             engine,
             summary,
             quarantine
         )
 
-        print("\n===== PIPELINE COMPLETED =====")
+        logger.info("Pipeline completed successfully")
+    except Exception:
+        logger.exception("RetailFlow pipeline failed")
+        raise
 
     finally:
         engine.dispose()

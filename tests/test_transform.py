@@ -1,4 +1,6 @@
 
+from decimal import Decimal
+
 import pandas as pd
 import pytest
 
@@ -27,13 +29,17 @@ def sample_data():
 
         "items": pd.DataFrame({
             "order_id": ["O101", "O101", "O102"],
-            "price": [10.00, 5.00, 25.00],
-            "freight_value": [1.00, 2.00, 4.00]
+            "price": [Decimal("10.00"), Decimal("5.00"), Decimal("25.00")],
+            "freight_value": [
+                Decimal("1.00"),
+                Decimal("2.00"),
+                Decimal("4.00")
+            ]
         }),
 
         "payments": pd.DataFrame({
             "order_id": ["O101", "O101"],
-            "payment_value": [10.00, 8.00]
+            "payment_value": [Decimal("10.00"), Decimal("8.00")]
         }),
 
         "reviews": pd.DataFrame({
@@ -59,8 +65,8 @@ def test_item_aggregation():
     ].iloc[0]
 
     assert order["item_count"] == 2
-    assert order["merchandise_value"] == pytest.approx(15.00)
-    assert order["freight_value"] == pytest.approx(3.00)
+    assert order["merchandise_value"] == Decimal("15.00")
+    assert order["freight_value"] == Decimal("3.00")
 
 
 def test_payment_aggregation_without_fanout():
@@ -71,7 +77,7 @@ def test_payment_aggregation_without_fanout():
     ].iloc[0]
 
     assert order["payment_count"] == 2
-    assert order["payment_total"] == pytest.approx(18.00)
+    assert order["payment_total"] == Decimal("18.00")
 
 
 def test_orders_without_payments_are_preserved():

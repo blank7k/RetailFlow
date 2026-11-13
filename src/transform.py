@@ -1,5 +1,16 @@
 
+from decimal import Decimal
+
 import pandas as pd
+
+
+MONEY_QUANTUM = Decimal("0.01")
+
+
+def quantize_money(value):
+    if pd.isna(value):
+        return None
+    return Decimal(str(value)).quantize(MONEY_QUANTUM)
 
 
 def transform_data(clean):
@@ -93,13 +104,13 @@ def transform_data(clean):
             .astype("int64")
         )
 
-    # Round monetary values for the MVP output
+    # Normalize money to exact two-decimal values for PostgreSQL and Parquet.
     for column in [
         "merchandise_value",
         "freight_value",
         "payment_total"
     ]:
-        summary[column] = summary[column].round(2)
+        summary[column] = summary[column].map(quantize_money)
 
     # STEP 8: Verify the final grain
     if summary["order_id"].duplicated().any():

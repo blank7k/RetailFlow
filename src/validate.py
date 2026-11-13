@@ -1,5 +1,24 @@
 
+import logging
+from decimal import Decimal, InvalidOperation
+
 import pandas as pd
+
+logger = logging.getLogger("retailflow")
+
+
+def parse_decimal(value):
+    if pd.isna(value):
+        return None
+    try:
+        amount = Decimal(str(value).strip())
+    except (InvalidOperation, ValueError):
+        return None
+    return amount if amount.is_finite() else None
+
+
+def is_negative(value):
+    return value is not None and value < Decimal("0")
 
 
 def split_valid_invalid(df, rules):
@@ -34,14 +53,16 @@ def validate_data(data):
     items = data["items"].copy()
     payments = data["payments"].copy()
     reviews = data["reviews"].copy()
+    products = data["products"].copy()
 
     # Normalise identifier columns
     for df, columns in [
         (orders, ["order_id", "customer_id"]),
         (customers, ["customer_id"]),
-        (items, ["order_id", "order_item_id"]),
+        (items, ["order_id", "order_item_id", "product_id"]),
         (payments, ["order_id", "payment_sequential"]),
-        (reviews, ["order_id", "review_id"])
+        (reviews, ["order_id", "review_id"]),
+        (products, ["product_id"])
     ]:
         for column in columns:
             df[column] = (
@@ -52,13 +73,9 @@ def validate_data(data):
 
     # Convert numerical fields
     for column in ["price", "freight_value"]:
-        items[column] = pd.to_numeric(
-            items[column], errors="coerce"
-        )
+        items[column] = items[column].map(parse_decimal)
 
-    payments["payment_value"] = pd.to_numeric(
-        payments["payment_value"], errors="coerce"
-    )
+    payments["payment_value"] = payments["payment_value"].map(parse_decimal)
 
     reviews["review_score"] = pd.to_numeric(
         reviews["review_score"], errors="coerce"
@@ -92,6 +109,13 @@ def validate_data(data):
     valid_order_ids = set(
         orders_clean["order_id"]
     )
+    valid_product_ids = set(
+        products.loc[
+            products["product_id"].notna()
+            & products["product_id"].ne(""),
+            "product_id"
+        ]
+    )
 
     # Validate order items
     items_clean, items_bad = split_valid_invalid(
@@ -103,21 +127,38 @@ def validate_data(data):
                 | items["order_id"].eq("")
             ),
             (
+                "missing_order_item_id",
+                items["order_item_id"].isna()
+                | items["order_item_id"].eq("")
+            ),
+            (
+                "missing_product_id",
+                items["product_id"].isna()
+                | items["product_id"].eq("")
+            ),
+            (
                 "orphan_order_id",
                 ~items["order_id"].isin(valid_order_ids)
             ),
             (
+                "orphan_product_id",
+                items["product_id"].notna()
+                & items["product_id"].ne("")
+                & ~items["product_id"].isin(valid_product_ids)
+            ),
+            (
                 "invalid_price",
                 items["price"].isna()
-                | items["price"].lt(0)
+                | items["price"].map(is_negative)
             ),
             (
                 "invalid_freight",
                 items["freight_value"].isna()
-                | items["freight_value"].lt(0)
+                | items["freight_value"].map(is_negative)
             ),
             (
                 "duplicate_order_item_key",
+                # All rows for a repeated (order_id, order_item_id) are quarantined.
                 items.duplicated(
                     ["order_id", "order_item_id"],
                     keep=False
@@ -126,7 +167,7 @@ def validate_data(data):
         ]
     )
 
-    # Validate payments
+    # Negative payments are retained because their transaction meaning is unknown.
     payments_clean, payments_bad = split_valid_invalid(
         payments,
         [
@@ -142,7 +183,6 @@ def validate_data(data):
             (
                 "invalid_payment_value",
                 payments["payment_value"].isna()
-                | payments["payment_value"].lt(0)
             ),
             (
                 "duplicate_payment_key",
@@ -168,6 +208,12 @@ def validate_data(data):
                 ~reviews["order_id"].isin(valid_order_ids)
             ),
             (
+                "duplicate_review_id",
+                reviews["review_id"].notna()
+                & reviews["review_id"].ne("")
+                & reviews["review_id"].duplicated(keep=False)
+            ),
+            (
                 "invalid_review_score",
                 reviews["review_score"].isna()
                 | ~reviews["review_score"].between(1, 5)
@@ -175,20 +221,35 @@ def validate_data(data):
         ]
     )
 
-    # Customer ID must be unique in the lookup table
-    customers = customers[
-        customers["customer_id"].notna()
-        & customers["customer_id"].ne("")
-    ].copy()
-
-    if customers["customer_id"].duplicated().any():
-        raise ValueError(
-            "Duplicate customer_id found in customers table"
-        )
+    # Quarantine every row in a duplicate customer_id group, as with item keys.
+    missing_customer_id = (
+        customers["customer_id"].isna()
+        | customers["customer_id"].eq("")
+    )
+    duplicate_customer_id = (
+        customers["customer_id"].duplicated(keep=False)
+        & ~missing_customer_id
+    )
+    customers_clean, customers_bad = split_valid_invalid(
+        customers,
+        [
+            ("missing_customer_id", missing_customer_id),
+            ("duplicate_customer_id", duplicate_customer_id)
+        ]
+    )
+    logger.info(
+        "Customer quality metrics: total=%d valid=%d quarantined=%d "
+        "missing_id=%d duplicate_id=%d",
+        len(customers),
+        len(customers_clean),
+        len(customers_bad),
+        int(missing_customer_id.sum()),
+        int(duplicate_customer_id.sum())
+    )
 
     clean = {
         "orders": orders_clean,
-        "customers": customers,
+        "customers": customers_clean,
         "items": items_clean,
         "payments": payments_clean,
         "reviews": reviews_clean
@@ -196,6 +257,7 @@ def validate_data(data):
 
     quarantine = {
         "orders": orders_bad,
+        "customers": customers_bad,
         "items": items_bad,
         "payments": payments_bad,
         "reviews": reviews_bad

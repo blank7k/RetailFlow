@@ -1,6 +1,10 @@
 
+import logging
+
 import pandas as pd
 from sqlalchemy import text
+
+logger = logging.getLogger("retailflow")
 
 
 def extract_data(engine):
@@ -49,6 +53,12 @@ def extract_data(engine):
                 order_id,
                 review_score
             FROM raw.reviews
+        """,
+
+        "products": """
+            SELECT
+                product_id
+            FROM raw.products
         """
     }
 
@@ -57,16 +67,13 @@ def extract_data(engine):
     with engine.connect() as connection:
 
         for name, query in queries.items():
-
-            print(f"Extracting {name}...")
+            logger.info("Extracting %s", name)
 
             data[name] = pd.read_sql_query(
                 text(query),
                 connection
             )
 
-            print(
-                f"Extracted {len(data[name])} records"
-            )
+            logger.info("Extracted %s records from %s", len(data[name]), name)
 
     return data
