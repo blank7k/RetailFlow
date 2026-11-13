@@ -28,6 +28,82 @@ from inflating financial totals. Product IDs are extracted for order-item
 referential-integrity checks; product-level analytical output is not yet
 implemented.
 
+## Architecture
+
+```mermaid
+flowchart TD
+    A["Olist Brazilian E-Commerce Dataset"] --> B["Raw CSV files"]
+    B --> C["Python and Pandas"]
+    C --> D["PostgreSQL raw schema"]
+    D --> E["Extract"]
+    E --> F["Validate data"]
+    F --> G["Valid records"]
+    F --> H["Quarantine invalid records"]
+    G --> I["Transform"]
+    I --> J["Aggregate order items"]
+    I --> K["Aggregate payments"]
+    I --> L["Aggregate reviews"]
+    J --> M["Order-level summary"]
+    K --> M
+    L --> M
+    M --> N["PostgreSQL analytics schema"]
+    M --> O["Parquet export"]
+    O --> P["Amazon S3"]
+    P --> Q["AWS Glue Data Catalog"]
+    Q --> R["Amazon Athena"]
+    R --> S["SQL analytics"]
+```
+
+## Project evidence
+
+The following screenshots document local pipeline execution and testing,
+PostgreSQL data-quality investigation, and the AWS S3/Athena workflow. They
+are evidence from the captured runs and do not imply that the pipeline is
+scheduled or deployed automatically.
+
+### ETL execution
+
+The captured terminal output shows 99,441 orders extracted and a
+99,441 × 14 analytical dataset generated. This screenshot ends during the
+loading stage, before the final completion message; it does not independently
+confirm that the run completed successfully.
+
+![ETL execution showing extracted orders and analytical dataset shape](docs/screenshots/ETL%20execution.png)
+
+### Automated testing
+
+All 19 tests passed in the captured run.
+
+![Automated test run with 19 passing tests](docs/screenshots/Automated%20testing.png)
+
+### PostgreSQL quality report
+
+The report highlights orders without item rows by status, including 603
+unavailable and 164 cancelled orders. These anomalies are retained for
+investigation rather than interpreted as ordinary sales.
+
+![PostgreSQL quality report showing orders without items by status](docs/screenshots/PostgreSQL%20quality%20report.png)
+
+### Amazon S3 upload
+
+The S3 console shows the uploaded `order_summary.parquet` object in the
+processed data location.
+
+![Amazon S3 processed Parquet object](docs/screenshots/S3%20upload.png)
+
+### Amazon Athena results
+
+The Athena query completed successfully and returned order counts by status,
+demonstrating that the cataloged cloud data can be queried.
+
+![Amazon Athena query results grouped by order status](docs/screenshots/Athena%20results.png)
+
+### Architecture diagram image
+
+The architecture is also available as a static image:
+
+![RetailFlow architecture diagram](docs/screenshots/mermaid-diagram.png)
+
 ### Validation behavior
 
 - Every row sharing a duplicate `order_id` is quarantined.
