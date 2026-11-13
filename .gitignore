@@ -1,0 +1,25 @@
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Dataset files - do not redistribute
+data/raw/
+data/processed/
+data/quarantine/
+
+# Logs
+logs/
+*.log
+
+# Editor and operating system
+.vscode/
+.DS_Store
+Thumbs.db
